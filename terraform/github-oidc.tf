@@ -15,8 +15,9 @@ data "aws_iam_openid_connect_provider" "github" {
 }
 
 locals {
-  github_repo = "maniscalcov/order-platform-eks"
-  ecr_repos   = ["order-api", "inventory-worker", "payment-worker"]
+  github_repo          = "maniscalcov/order-platform-eks"
+  github_repo_with_ids = "maniscalcov@231953620/order-platform-eks@1389894723"
+  ecr_repos            = ["order-api", "inventory-worker", "payment-worker"]
 }
 
 data "aws_iam_policy_document" "github_actions_assume" {
@@ -37,10 +38,18 @@ data "aws_iam_policy_document" "github_actions_assume" {
 
     # Only pushes to main in this one repo can assume the role. Pull requests
     # (including from forks) still build and scan, but never get AWS creds.
+    #
+    # GitHub's sub claim now embeds immutable numeric IDs for the owner and
+    # repo (owner@id/repo@id), found via CloudTrail. The IDs survive renames,
+    # so a deleted-and-recreated repo with the same name can't inherit access.
+    # The legacy format is kept as a fallback in case the claim changes back.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.github_repo}:ref:refs/heads/main"]
+      values = [
+        "repo:${local.github_repo_with_ids}:ref:refs/heads/main",
+        "repo:${local.github_repo}:ref:refs/heads/main",
+      ]
     }
   }
 }
