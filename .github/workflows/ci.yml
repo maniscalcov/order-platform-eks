@@ -1,0 +1,95 @@
+# Build -> scan -> push for all three services.
+#
+# Pull requests: build + Trivy scan only. No AWS credentials are ever issued
+# (the IAM role's trust policy only accepts refs/heads/main).
+# Push to main: same, then push to ECR tagged with the git commit SHA, so every
+# image traces back to the exact commit that produced it.
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "services/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+# Least privilege for the GITHUB_TOKEN. id-token: write is what lets the job
+# request an OIDC token to exchange for AWS credentials.
+permissions:
+  contents: read
+  id-token: write
+  security-events: write # upload Trivy results to the Security tab
+
+env:
+  AWS_REGION: us-east-2
+
+jobs:
+  build-scan-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [order-api, inventory-worker, payment-worker]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t ${{ matrix.service }}:${{ github.sha }} services/${{ matrix.service }}
+
+      # Full HIGH+CRITICAL report as SARIF for the GitHub Security tab.
+      # Informational only: does not fail the build.
+      - name: Trivy scan (report)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.service }}:${{ github.sha }}
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload scan to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+      # The gate: any CRITICAL vulnerability that has a fix available stops
+      # the pipeline before anything reaches ECR.
+      - name: Trivy scan (gate on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.service }}:${{ github.sha }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Configure AWS credentials (OIDC)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push to ECR
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/${{ matrix.service }}:${{ github.sha }}"
+          docker tag ${{ matrix.service }}:${{ github.sha }} "$IMAGE"
+          docker push "$IMAGE"
+          echo "Pushed $IMAGE" >> "$GITHUB_STEP_SUMMARY"

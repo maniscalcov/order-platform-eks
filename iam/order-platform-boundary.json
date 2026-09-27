@@ -53,6 +53,21 @@
       "Resource": "*"
     },
     {
+      "Sid": "CiPushToProjectEcrRepos",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage"
+      ],
+      "Resource": [
+        "arn:aws:ecr:us-east-2:584477830979:repository/order-api",
+        "arn:aws:ecr:us-east-2:584477830979:repository/inventory-worker",
+        "arn:aws:ecr:us-east-2:584477830979:repository/payment-worker"
+      ]
+    },
+    {
       "Sid": "NoIamEscalationEver",
       "Effect": "Deny",
       "Action": [
