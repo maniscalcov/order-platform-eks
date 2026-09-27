@@ -45,7 +45,7 @@ jobs:
       # Full HIGH+CRITICAL report as SARIF for the GitHub Security tab.
       # Informational only: does not fail the build.
       - name: Trivy scan (report)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.service }}:${{ github.sha }}
           format: sarif
@@ -64,7 +64,7 @@ jobs:
       # The gate: any CRITICAL vulnerability that has a fix available stops
       # the pipeline before anything reaches ECR.
       - name: Trivy scan (gate on fixable CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.service }}:${{ github.sha }}
           format: table
