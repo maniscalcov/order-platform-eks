@@ -1,0 +1,22 @@
+# Matches inventory-worker/app/config.py exactly.
+#
+# BEFORE APPLYING: replace <ACCOUNT_ID> in both queue URLs.
+#
+# REMINDER: INVENTORY_TABLE_NAME points at a table your Phase 1 Terraform
+# does not create yet. Add it (partition key `sku`, attribute
+# `quantity_available` as a Number) and seed a few SKUs, or every
+# reservation will fail with ResourceNotFoundException.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inventory-worker-config
+  namespace: order-platform
+data:
+  AWS_REGION: "us-east-2"
+  ORDERS_TABLE_NAME: "order-platform-orders"
+  INVENTORY_TABLE_NAME: "order-platform-inventory"
+  INVENTORY_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/584477830979/order-platform-inventory"
+  PAYMENT_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/584477830979/order-platform-payment"
+  POLL_WAIT_TIME_SECONDS: "20"
+  MAX_MESSAGES_PER_POLL: "5"
+  LOG_LEVEL: "INFO"

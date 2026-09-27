@@ -1,0 +1,29 @@
+# ClusterIP: reachable from inside the cluster only, at
+# http://order-api.order-platform.svc.cluster.local:80
+#
+# Deliberately NOT a LoadBalancer. Public exposure belongs to an Ingress
+# fronted by the AWS Load Balancer Controller (your Phase 1
+# alb-controller-policy.json) - that way one ALB can serve many services
+# and you're not paying for an NLB per Service. Add the Ingress when you
+# actually need external access; for load testing you can just
+# `kubectl port-forward` to this Service.
+#
+# Note there is no Service for inventory-worker or payment-worker: nothing
+# ever calls into them. They pull work from SQS instead, which is exactly
+# why they can scale on queue depth rather than on inbound requests.
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-api
+  namespace: order-platform
+  labels:
+    app: order-api
+spec:
+  type: ClusterIP
+  selector:
+    app: order-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

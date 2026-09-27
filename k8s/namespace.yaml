@@ -1,0 +1,10 @@
+# A dedicated namespace keeps the app's objects separate from kube-system
+# and from the monitoring stack (Prometheus/Grafana) installed via Helm.
+# It also gives you a single place to apply future NetworkPolicies or
+# ResourceQuotas across all three services.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: order-platform
+  labels:
+    name: order-platform

@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-worker
+  namespace: order-platform
+  labels:
+    app: payment-worker
+spec:
+  # Also safe to run several: process_message() checks the order is still
+  # INVENTORY_RESERVED before charging, and the conditional update closes
+  # the race if two pods get the same redelivered message at once.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-worker
+  template:
+    metadata:
+      labels:
+        app: payment-worker
+    spec:
+      serviceAccountName: payment-worker
+
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: payment-worker
+          # BEFORE APPLYING: replace with your ECR image URI + a real tag.
+          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/payment-worker:1.0.1
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: health
+              containerPort: 8080
+
+          envFrom:
+            - configMapRef:
+                name: payment-worker-config
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+
+          # Slightly more CPU headroom than inventory-worker: the
+          # simulated gateway sleeps 50-300ms per message, so under load
+          # these pods spend longer per message and are the natural place
+          # for a backlog to build. That's intentional - it gives the load
+          # test something to actually strain.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 400m
+              memory: 256Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      # Same reasoning as inventory-worker: long-poll + in-flight batch
+      # need to finish before SIGKILL. Extra important here - a pod killed
+      # between simulate_charge() and the status update is exactly the
+      # "money moved but state didn't" case the code flags as a known gap.
+      terminationGracePeriodSeconds: 60

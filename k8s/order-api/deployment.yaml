@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-api
+  namespace: order-platform
+  labels:
+    app: order-api
+spec:
+  # Start at 2 so a single pod dying (or a node draining) never means zero
+  # capacity. The HPA takes over from here and scales up under load.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: order-api
+  template:
+    metadata:
+      labels:
+        app: order-api
+    spec:
+      # Ties the pod to the IRSA-annotated SA. Without this line the pod
+      # falls back to the node's instance role and your least-privilege
+      # setup is silently bypassed.
+      serviceAccountName: order-api
+
+      # Defense in depth: the image already runs as a non-root user, and
+      # this enforces it at the cluster level too, so a rebuilt image that
+      # forgets USER app gets rejected rather than quietly running as root.
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: order-api
+          # BEFORE APPLYING: replace with your ECR image URI.
+          # Use a real tag (a git SHA), never :latest - with :latest you
+          # can't tell which build a running pod is on, and rollbacks
+          # become guesswork.
+          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/order-api:1.0.1
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8000
+
+          # Pulls in every key from the ConfigMap as an env var. Because the
+          # names there match config.py exactly, nothing needs mapping.
+          envFrom:
+            - configMapRef:
+                name: order-api-config
+
+          # Two probes, two different jobs:
+          #   readiness - "can this pod take traffic right now?" If it
+          #     fails, the pod is pulled from the Service's endpoints but
+          #     NOT restarted.
+          #   liveness - "is this pod wedged and beyond saving?" If it
+          #     fails, kubelet restarts the container.
+          # Liveness gets a longer period and higher failure threshold on
+          # purpose: an over-eager liveness probe turns a brief slowdown
+          # into a restart loop, which makes an overload situation worse.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+
+          # requests = what the scheduler reserves (and what the HPA
+          # measures utilization against). limits = the hard ceiling.
+          # CPU limits are deliberately generous relative to the request:
+          # throttling a web API at its request value tanks p99 latency.
+          # Memory limit == a hard OOM-kill boundary, so it sits well above
+          # normal usage.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          # readOnlyRootFilesystem blocks all writes, but Python still
+          # wants somewhere for temp files - so mount an emptyDir at /tmp.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      # Give in-flight HTTP requests time to finish when a pod is being
+      # replaced during a rolling update.
+      terminationGracePeriodSeconds: 30

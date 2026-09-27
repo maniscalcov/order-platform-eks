@@ -1,0 +1,57 @@
+# --- Terraform ---
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfplan
+tfplan
+
+# --- AWS / IAM ---
+.aws/
+*.pem
+*.pfx
+
+# --- Kubernetes ---
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+.kube/
+**/charts/*.tgz
+
+# --- Secrets / env files ---
+.env
+.env.*
+!.env.example
+*.secret
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+
+#venv
+**/.venv/
+.venv/
+
+#python files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# --- Misc ---
+*.log
+node_modules/
+.idea/

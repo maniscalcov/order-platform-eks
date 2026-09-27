@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-load
+  namespace: order-platform
+spec:
+  backoffLimit: 0                  # don't retry a failed load test
+  ttlSecondsAfterFinished: 3600    # auto-clean the Job an hour after it finishes
+  template:
+    metadata:
+      labels:
+        app: k6-load
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 12345           # the k6 image's built-in non-root user
+      containers:
+        - name: k6
+          image: grafana/k6:latest
+          args: ["run", "/scripts/order-api-load.js"]
+          env:
+            - name: BASE_URL       # the script reads __ENV.BASE_URL
+              value: "http://order-api.order-platform.svc.cluster.local"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: k6-scripts

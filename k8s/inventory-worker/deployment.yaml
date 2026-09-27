@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-worker
+  namespace: order-platform
+  labels:
+    app: inventory-worker
+spec:
+  # Safe to run several: reserve_item() uses a conditional DynamoDB update,
+  # so two pods racing on the same SKU can't oversell it - the loser's
+  # update is rejected and its message is retried.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inventory-worker
+  template:
+    metadata:
+      labels:
+        app: inventory-worker
+    spec:
+      serviceAccountName: inventory-worker
+
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: inventory-worker
+          # BEFORE APPLYING: replace with your ECR image URI + a real tag.
+          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/inventory-worker:1.0.1
+          imagePullPolicy: IfNotPresent
+
+          # Exposed only so the probe below has somewhere to hit. There is
+          # no Service in front of this - nothing in the cluster calls a
+          # worker, it pulls its own work from SQS.
+          ports:
+            - name: health
+              containerPort: 8080
+
+          envFrom:
+            - configMapRef:
+                name: inventory-worker-config
+
+          # Liveness only, no readiness. Readiness exists to gate traffic
+          # from a Service, and there's no Service here - a "not ready"
+          # worker would just sit there with nothing changing. Liveness
+          # still earns its place: if the poll loop deadlocks, the health
+          # thread dies with it and kubelet restarts the pod.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+
+          # Lower CPU than order-api (no request handling, mostly waiting
+          # on long-poll), similar memory for the boto3 client.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      # Deliberately longer than order-api's 30s. On SIGTERM, worker.py
+      # sets the shutdown flag but finishes the batch it's holding first,
+      # and it may have just started a 20s long-poll. 60s leaves room for
+      # that poll to return plus the batch to finish, so a rolling update
+      # doesn't SIGKILL a pod mid-reservation and leave stock reserved
+      # against an order that never advances.
+      terminationGracePeriodSeconds: 60

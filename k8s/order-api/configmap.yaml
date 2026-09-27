@@ -1,0 +1,16 @@
+# These are exactly the environment variables app/config.py reads.
+# None of them are secret - table names and queue URLs aren't credentials,
+# and the actual AWS auth comes from IRSA. If you later add something that
+# IS secret (an API key, say), that goes in a Secret, not here.
+#
+# BEFORE APPLYING: replace <ACCOUNT_ID> in the queue URL.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-api-config
+  namespace: order-platform
+data:
+  AWS_REGION: "us-east-2"
+  ORDERS_TABLE_NAME: "order-platform-orders"
+  INVENTORY_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/584477830979/order-platform-inventory"
+  LOG_LEVEL: "INFO"

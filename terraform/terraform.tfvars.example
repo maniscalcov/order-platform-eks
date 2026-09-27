@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars and fill in your own values.
+# terraform.tfvars is gitignored.
+
+# IAM principals granted cluster-admin access to EKS
+admin_principal_arns = [
+  "arn:aws:iam::<ACCOUNT_ID>:user/<YOUR_ADMIN_USER>"
+]
+
+# Permissions boundary attached to every IAM role Terraform creates
+iam_permissions_boundary_arn = "arn:aws:iam::<ACCOUNT_ID>:policy/order-platform-boundary"

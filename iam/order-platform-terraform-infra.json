@@ -1,0 +1,196 @@
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "NetworkingAndCompute",
+			"Effect": "Allow",
+			"Action": [
+				"ec2:Describe*",
+				"ec2:Create*",
+				"ec2:Delete*",
+				"ec2:Modify*",
+				"ec2:Attach*",
+				"ec2:Detach*",
+				"ec2:Associate*",
+				"ec2:Disassociate*",
+				"ec2:Allocate*",
+				"ec2:Release*",
+				"ec2:AuthorizeSecurityGroup*",
+				"ec2:RevokeSecurityGroup*",
+				"ec2:RunInstances",
+				"ec2:TerminateInstances",
+				"ec2:GetLaunchTemplateData"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringEquals": {
+					"aws:RequestedRegion": "us-east-2"
+				}
+			}
+		},
+		{
+			"Sid": "EKSControlPlaneAndNodes",
+			"Effect": "Allow",
+			"Action": [
+				"eks:CreateCluster",
+				"eks:DeleteCluster",
+				"eks:DescribeCluster",
+				"eks:ListClusters",
+				"eks:UpdateClusterConfig",
+				"eks:UpdateClusterVersion",
+				"eks:TagResource",
+				"eks:UntagResource",
+				"eks:ListTagsForResource",
+				"eks:CreateNodegroup",
+				"eks:DeleteNodegroup",
+				"eks:DescribeNodegroup",
+				"eks:ListNodegroups",
+				"eks:UpdateNodegroupConfig",
+				"eks:UpdateNodegroupVersion",
+				"eks:CreateAddon",
+				"eks:DeleteAddon",
+				"eks:DescribeAddon",
+				"eks:DescribeAddonVersions",
+				"eks:DescribeAddonConfiguration",
+				"eks:ListAddons",
+				"eks:UpdateAddon",
+				"eks:CreateAccessEntry",
+				"eks:DeleteAccessEntry",
+				"eks:DescribeAccessEntry",
+				"eks:ListAccessEntries",
+				"eks:UpdateAccessEntry",
+				"eks:AssociateAccessPolicy",
+				"eks:DisassociateAccessPolicy",
+				"eks:ListAssociatedAccessPolicies",
+				"eks:ListAccessPolicies",
+				"eks:DescribeUpdate"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringEquals": {
+					"aws:RequestedRegion": "us-east-2"
+				}
+			}
+		},
+		{
+			"Sid": "AutoScalingForManagedNodeGroups",
+			"Effect": "Allow",
+			"Action": [
+				"autoscaling:Describe*",
+				"autoscaling:CreateOrUpdateTags",
+				"autoscaling:DeleteTags",
+				"autoscaling:UpdateAutoScalingGroup",
+				"autoscaling:SetDesiredCapacity"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringEquals": {
+					"aws:RequestedRegion": "us-east-2"
+				}
+			}
+		},
+		{
+			"Sid": "ControlPlaneLogging",
+			"Effect": "Allow",
+			"Action": [
+				"logs:CreateLogGroup",
+				"logs:DeleteLogGroup",
+				"logs:PutRetentionPolicy",
+				"logs:DeleteRetentionPolicy",
+				"logs:TagResource",
+				"logs:UntagResource",
+				"logs:ListTagsForResource"
+			],
+			"Resource": "arn:aws:logs:us-east-2:*:log-group:/aws/eks/order-platform-*"
+		},
+		{
+			"Sid": "LogsDescribeRequiresWildcardResource",
+			"Effect": "Allow",
+			"Action": [
+				"logs:DescribeLogGroups"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "OrderPlatformDynamoDB",
+			"Effect": "Allow",
+			"Action": [
+				"dynamodb:CreateTable",
+				"dynamodb:DeleteTable",
+				"dynamodb:DescribeTable",
+				"dynamodb:DescribeContinuousBackups",
+				"dynamodb:DescribeTimeToLive",
+				"dynamodb:UpdateTable",
+				"dynamodb:TagResource",
+				"dynamodb:UntagResource",
+				"dynamodb:ListTagsOfResource",
+				"dynamodb:PutItem",
+				"dynamodb:GetItem",
+				"dynamodb:DeleteItem",
+				"dynamodb:UpdateItem"
+			],
+			"Resource": "arn:aws:dynamodb:us-east-2:*:table/order-platform-*"
+		},
+		{
+			"Sid": "OrderPlatformSQS",
+			"Effect": "Allow",
+			"Action": [
+				"sqs:CreateQueue",
+				"sqs:DeleteQueue",
+				"sqs:GetQueueAttributes",
+				"sqs:SetQueueAttributes",
+				"sqs:GetQueueUrl",
+				"sqs:TagQueue",
+				"sqs:UntagQueue",
+				"sqs:ListQueueTags"
+			],
+			"Resource": "arn:aws:sqs:us-east-2:*:order-platform-*"
+		},
+		{
+			"Sid": "KmsForSecretsAndEbsEncryption",
+			"Effect": "Allow",
+			"Action": [
+				"kms:CreateKey",
+				"kms:DescribeKey",
+				"kms:CreateGrant",
+				"kms:ListAliases",
+				"kms:ListResourceTags",
+				"kms:GenerateDataKeyWithoutPlaintext",
+				"kms:TagResource",
+				"kms:UntagResource",
+				"kms:EnableKeyRotation",
+				"kms:DisableKeyRotation",
+				"kms:GetKeyRotationStatus",
+				"kms:PutKeyPolicy",
+				"kms:GetKeyPolicy",
+				"kms:CreateAlias",
+				"kms:DeleteAlias",
+				"kms:UpdateAlias",
+				"kms:ScheduleKeyDeletion",
+				"kms:CancelKeyDeletion"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringEquals": {
+					"aws:RequestedRegion": "us-east-2"
+				}
+			}
+		},
+		{
+			"Sid": "ElasticLoadBalancingReadOnly",
+			"Effect": "Allow",
+			"Action": [
+				"elasticloadbalancing:Describe*"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "Identity",
+			"Effect": "Allow",
+			"Action": [
+				"sts:GetCallerIdentity"
+			],
+			"Resource": "*"
+		}
+	]
+}

@@ -1,0 +1,55 @@
+# This is the object your Phase 2 "verify the HPA scales under load" step
+# exercises: run the k6 script, watch `kubectl get hpa -n order-platform -w`
+# and see replicas climb.
+#
+# REQUIRES metrics-server to be installed in the cluster. Without it the
+# HPA sits at "<unknown>/60%" forever and never scales. If you haven't
+# installed it yet:
+#   helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+#   helm install metrics-server metrics-server/metrics-server -n kube-system
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: order-api
+  namespace: order-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: order-api
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+    # 60% of the 100m CPU *request* (not the limit) - so ~60m sustained
+    # per pod triggers a scale-up. Targeting 60 rather than 80+ leaves
+    # headroom to absorb a spike while new pods are still starting.
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+
+  # Asymmetric on purpose: scale up fast, scale down slowly.
+  # Scaling up late costs you dropped requests; scaling down early causes
+  # flapping, where the HPA removes pods and immediately needs them back.
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 100        # allowed to double the replica count...
+          periodSeconds: 30 # ...every 30s
+    scaleDown:
+      stabilizationWindowSeconds: 300  # wait 5 min of sustained low load
+      policies:
+        - type: Pods
+          value: 1          # then remove just one pod at a time
+          periodSeconds: 60

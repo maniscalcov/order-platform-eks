@@ -1,0 +1,22 @@
+# Matches payment-worker/app/config.py exactly.
+#
+# BEFORE APPLYING: replace <ACCOUNT_ID> in the queue URL.
+#
+# PAYMENT_FAILURE_RATE drives the simulated gateway in payment_gateway.py.
+# 0.1 = 10% of charges decline, which keeps the PAYMENT_FAILED path warm
+# in normal operation. Turn it up (0.5, or 1.0) during chaos testing to
+# force that path on demand - it's a ConfigMap value, so you can change it
+# and restart the deployment without rebuilding the image.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-worker-config
+  namespace: order-platform
+data:
+  AWS_REGION: "us-east-2"
+  ORDERS_TABLE_NAME: "order-platform-orders"
+  PAYMENT_QUEUE_URL: "https://sqs.us-east-2.amazonaws.com/584477830979/order-platform-payment"
+  POLL_WAIT_TIME_SECONDS: "20"
+  MAX_MESSAGES_PER_POLL: "5"
+  PAYMENT_FAILURE_RATE: "0.1"
+  LOG_LEVEL: "INFO"
