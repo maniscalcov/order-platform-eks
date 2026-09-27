@@ -83,8 +83,8 @@ variable "iam_permissions_boundary_arn" {
     Required if the terraform-cli-iam user policy is in place, since that
     policy refuses to create a role without it.
   EOT
-  type    = string
-  default = null
+  type        = string
+  default     = null
 }
 
 variable "public_api_access_cidrs" {

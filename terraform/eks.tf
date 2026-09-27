@@ -47,16 +47,19 @@ module "eks" {
     coredns    = {}
     kube-proxy = {}
     vpc-cni = {
-      before_compute             = true
-      most_recent                = true
+      before_compute              = true
+      most_recent                 = true
       resolve_conflicts_on_create = "OVERWRITE"
       resolve_conflicts_on_update = "OVERWRITE"
     }
     eks-pod-identity-agent = {}
+    # EKS community add-on. Installed by Terraform so every fresh cluster has
+    # it: without it the order-api HPA reads "<unknown>" and never scales.
+    metrics-server = {}
     aws-ebs-csi-driver = {
       # Prometheus and Grafana want PersistentVolumes. Without this addon
       # their PVCs sit Pending forever and the failure mode is not obvious.
-      service_account_role_arn   = aws_iam_role.ebs_csi.arn
+      service_account_role_arn    = aws_iam_role.ebs_csi.arn
       resolve_conflicts_on_create = "OVERWRITE"
       resolve_conflicts_on_update = "OVERWRITE"
     }

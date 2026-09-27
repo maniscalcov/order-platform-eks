@@ -49,7 +49,7 @@ resource "aws_sqs_queue" "inventory" {
 # downstream of it (see the note in its IAM policy in app-iam.tf).
 # ---------------------------------------------------------------------------
 resource "aws_sqs_queue" "payment_dlq" {
-  name                       = "${var.project_name}-payment-dlq"
+  name                      = "${var.project_name}-payment-dlq"
   message_retention_seconds = 1209600
 
   tags = {

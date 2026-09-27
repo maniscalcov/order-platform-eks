@@ -1,12 +1,8 @@
-# This is the object your Phase 2 "verify the HPA scales under load" step
-# exercises: run the k6 script, watch `kubectl get hpa -n order-platform -w`
-# and see replicas climb.
+# Phase 2 verified this scales under load: run the k6 job, then watch
+# `kubectl get hpa -n order-platform -w` and see replicas climb.
 #
-# REQUIRES metrics-server to be installed in the cluster. Without it the
-# HPA sits at "<unknown>/60%" forever and never scales. If you haven't
-# installed it yet:
-#   helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
-#   helm install metrics-server metrics-server/metrics-server -n kube-system
+# REQUIRES metrics-server. It is installed as an EKS add-on in
+# terraform/eks.tf, so it comes up with the cluster.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -21,21 +17,19 @@ spec:
   maxReplicas: 10
 
   metrics:
-    # 60% of the 100m CPU *request* (not the limit) - so ~60m sustained
-    # per pod triggers a scale-up. Targeting 60 rather than 80+ leaves
-    # headroom to absorb a spike while new pods are still starting.
+    # CPU only. Memory was removed: Python processes don't give memory back
+    # after a spike, so a memory target kept replicas pinned above the floor
+    # long after load ended.
+    #
+    # 70% of the 100m CPU *request* (not the limit), so ~70m sustained per
+    # pod triggers a scale-up. Raised from 60: the Phase 2 load test showed
+    # p95 stayed at 90ms even at ~200% of request, so 60 was wasting pods.
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 60
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 75
+          averageUtilization: 70
 
   # Asymmetric on purpose: scale up fast, scale down slowly.
   # Scaling up late costs you dropped requests; scaling down early causes
