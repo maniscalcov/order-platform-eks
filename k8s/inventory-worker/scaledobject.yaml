@@ -1,0 +1,26 @@
+# Scales inventory-worker on SQS queue depth instead of CPU.
+# Why not CPU: a worker blocked on a 20s long-poll uses almost no CPU, so a
+# CPU-based HPA would sit at minimum while thousands of messages pile up.
+# KEDA creates and manages an HPA (keda-hpa-inventory-worker) from this.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: inventory-worker
+  namespace: order-platform
+spec:
+  scaleTargetRef:
+    name: inventory-worker
+  minReplicaCount: 1      # always one warm consumer; no cold start on the saga
+  maxReplicaCount: 6      # capped so a load test fits in 3x t3.medium pod slots
+  pollingInterval: 15     # seconds between queue-depth checks
+  cooldownPeriod: 120
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: keda-aws
+      metadata:
+        queueURL: https://sqs.us-east-2.amazonaws.com/584477830979/order-platform-inventory
+        awsRegion: us-east-2
+        # Target messages per replica (visible + in-flight).
+        # 100 queued -> 5 pods, 200+ -> capped at 6.
+        queueLength: "20"

@@ -69,6 +69,20 @@ module "eks" {
   # why an IRSA-authenticated pod is getting AccessDenied.
   cluster_enabled_log_types = ["api", "audit", "authenticator"]
 
+  # The EKS metrics-server add-on listens on 10251 (kubelet owns 10250).
+  # The module's default node SG rules don't open it, so the API server's
+  # calls to metrics-server time out -> APIService FailedDiscoveryCheck.
+  node_security_group_additional_rules = {
+    ingress_cluster_metrics_server = {
+      description                   = "Cluster API to metrics-server"
+      protocol                      = "tcp"
+      from_port                     = 10251
+      to_port                       = 10251
+      type                          = "ingress"
+      source_cluster_security_group = true
+    }
+  }
+
   eks_managed_node_group_defaults = {
     ami_type                      = "AL2023_x86_64_STANDARD"
     iam_role_permissions_boundary = var.iam_permissions_boundary_arn

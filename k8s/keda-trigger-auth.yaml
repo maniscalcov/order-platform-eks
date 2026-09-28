@@ -1,0 +1,14 @@
+# Tells KEDA how to authenticate to AWS for the aws-sqs-queue scaler.
+# identityOwner: keda -> use the KEDA operator's own IRSA role
+# (order-platform-keda-operator, sqs:GetQueueAttributes on the two work
+# queues only). The workers' roles are never borrowed, so the autoscaler
+# cannot read or delete messages.
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-aws
+  namespace: order-platform
+spec:
+  podIdentity:
+    provider: aws
+    identityOwner: keda
