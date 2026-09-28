@@ -36,7 +36,7 @@ spec:
           # Use a real tag (a git SHA), never :latest - with :latest you
           # can't tell which build a running pod is on, and rollbacks
           # become guesswork.
-          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/order-api:1.0.1
+          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/order-api:3da7e8ef1fbc9b793b7274c121055591c6d52b3e
           imagePullPolicy: IfNotPresent
 
           ports:

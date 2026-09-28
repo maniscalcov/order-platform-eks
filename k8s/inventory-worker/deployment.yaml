@@ -30,7 +30,7 @@ spec:
       containers:
         - name: inventory-worker
           # BEFORE APPLYING: replace with your ECR image URI + a real tag.
-          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/inventory-worker:1.0.1
+          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/inventory-worker:3da7e8ef1fbc9b793b7274c121055591c6d52b3e
           imagePullPolicy: IfNotPresent
 
           # Exposed only so the probe below has somewhere to hit. There is
