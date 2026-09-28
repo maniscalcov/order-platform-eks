@@ -13,7 +13,7 @@ variable "project_name" {
 variable "cluster_version" {
   description = "EKS control plane version. Pin this explicitly."
   type        = string
-  default     = "1.32"
+  default     = "1.35"
 }
 
 variable "vpc_cidr" {
