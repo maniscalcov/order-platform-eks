@@ -93,3 +93,38 @@ jobs:
           docker tag ${{ matrix.service }}:${{ github.sha }} "$IMAGE"
           docker push "$IMAGE"
           echo "Pushed $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+  # GitOps hand-off: once all three images are in ECR, point the manifests at
+  # the new SHA tag and commit. ArgoCD sees the commit and rolls it out - CI
+  # never talks to the cluster and holds no kube credentials.
+  update-manifests:
+    needs: build-scan-push   # runs only if all three matrix builds passed the Trivy gate
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # only this job can push; the build job stays read-only
+    concurrency:
+      group: update-manifests
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Bump image tags to this commit's SHA
+        run: |
+          for svc in order-api inventory-worker payment-worker; do
+            sed -i -E "s#(image: .*/${svc}):[^[:space:]]+#\1:${GITHUB_SHA}#" "k8s/${svc}/deployment.yaml"
+          done
+          git diff
+
+      # No infinite loop, three ways: (1) this commit only touches k8s/, which
+      # is outside the workflow's paths filter; (2) pushes made with
+      # GITHUB_TOKEN never trigger new workflow runs; (3) [skip ci] as a backstop.
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add k8s/*/deployment.yaml
+          if git diff --cached --quiet; then echo "Tags already current"; exit 0; fi
+          git commit -m "deploy: images -> ${GITHUB_SHA::7} [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
