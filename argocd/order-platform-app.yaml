@@ -1,0 +1,27 @@
+# The one manifest applied by hand (bootstrap). Everything under k8s/ is
+# deployed by ArgoCD from GitHub from here on.
+#
+# Prerequisite: KEDA must already be installed (Helm) - the ScaledObjects in
+# k8s/ need its CRDs, or the sync fails on those two resources.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: order-platform
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/maniscalcov/order-platform-eks.git
+    targetRevision: main
+    path: k8s
+    directory:
+      recurse: true          # pick up k8s/<svc>/ subfolders; README.md is ignored
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: order-platform
+  syncPolicy:
+    automated:
+      prune: true            # a file deleted from Git -> resource deleted from cluster
+      selfHeal: true         # a manual kubectl edit -> reverted to match Git
+    syncOptions:
+      - ApplyOutOfSyncOnly=true

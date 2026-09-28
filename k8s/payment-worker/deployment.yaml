@@ -9,7 +9,9 @@ spec:
   # Also safe to run several: process_message() checks the order is still
   # INVENTORY_RESERVED before charging, and the conditional update closes
   # the race if two pods get the same redelivered message at once.
-  replicas: 2
+  # No replicas field on purpose: the autoscaler (HPA for order-api, KEDA
+  # for the workers) owns the replica count. If Git pinned a number here,
+  # ArgoCD self-heal and the autoscaler would fight over it.
   selector:
     matchLabels:
       app: payment-worker

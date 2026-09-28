@@ -6,9 +6,9 @@ metadata:
   labels:
     app: order-api
 spec:
-  # Start at 2 so a single pod dying (or a node draining) never means zero
-  # capacity. The HPA takes over from here and scales up under load.
-  replicas: 2
+  # No replicas field on purpose: the autoscaler (HPA for order-api, KEDA
+  # for the workers) owns the replica count. If Git pinned a number here,
+  # ArgoCD self-heal and the autoscaler would fight over it.
   selector:
     matchLabels:
       app: order-api

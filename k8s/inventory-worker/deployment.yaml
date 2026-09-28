@@ -9,7 +9,9 @@ spec:
   # Safe to run several: reserve_item() uses a conditional DynamoDB update,
   # so two pods racing on the same SKU can't oversell it - the loser's
   # update is rejected and its message is retried.
-  replicas: 2
+  # No replicas field on purpose: the autoscaler (HPA for order-api, KEDA
+  # for the workers) owns the replica count. If Git pinned a number here,
+  # ArgoCD self-heal and the autoscaler would fight over it.
   selector:
     matchLabels:
       app: inventory-worker
