@@ -1,0 +1,272 @@
+# SLOs for POST /orders + saga health alerts.
+#
+# SLOs (error budget in brackets):
+#   orders-availability : 99.5% of POST /orders return non-5xx   [0.5%]
+#   orders-latency      : 99%   of POST /orders finish < 250ms   [1%]
+#
+# Alerting = multi-window, multi-burn-rate (Google SRE Workbook ch.5).
+# "Burn rate" = how fast the error budget is being spent; 1x spends exactly
+# the whole budget over the SLO period. Each alert needs BOTH a long window
+# (proves it's sustained, not a blip) AND a short window (proves it's still
+# happening, so the alert resolves quickly after a fix).
+#   critical: 14.4x over 1h & 5m   (2% of a 30d budget gone in 1h)
+#             6x    over 6h & 30m  (5% of budget gone in 6h)
+#   warning:  3x    over 1d & 2h
+# The workbook's 1x-over-3d tier is omitted: Prometheus retention here is 24h.
+#
+# Picked up without a "release" label because kps-values.yaml sets
+# ruleSelectorNilUsesHelmValues: false.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: order-platform-slos
+  namespace: order-platform
+  labels:
+    app: order-platform
+spec:
+  groups:
+    # ---------------- orders-availability: 99.5% non-5xx [budget 0.005] ----------------
+    - name: slo-orders-availability-recording
+      interval: 30s
+      rules:
+        - record: slo:sli_error:ratio_rate5m
+          labels:
+            slo: orders-availability
+          expr: |
+            (
+              sum(rate(http_requests_total{job="order-api",method="POST",route="/orders",status=~"5.."}[5m]))
+              or vector(0)
+            )
+            /
+            sum(rate(http_requests_total{job="order-api",method="POST",route="/orders"}[5m]))
+        - record: slo:sli_error:ratio_rate30m
+          labels:
+            slo: orders-availability
+          expr: |
+            (
+              sum(rate(http_requests_total{job="order-api",method="POST",route="/orders",status=~"5.."}[30m]))
+              or vector(0)
+            )
+            /
+            sum(rate(http_requests_total{job="order-api",method="POST",route="/orders"}[30m]))
+        - record: slo:sli_error:ratio_rate1h
+          labels:
+            slo: orders-availability
+          expr: |
+            (
+              sum(rate(http_requests_total{job="order-api",method="POST",route="/orders",status=~"5.."}[1h]))
+              or vector(0)
+            )
+            /
+            sum(rate(http_requests_total{job="order-api",method="POST",route="/orders"}[1h]))
+        - record: slo:sli_error:ratio_rate2h
+          labels:
+            slo: orders-availability
+          expr: |
+            (
+              sum(rate(http_requests_total{job="order-api",method="POST",route="/orders",status=~"5.."}[2h]))
+              or vector(0)
+            )
+            /
+            sum(rate(http_requests_total{job="order-api",method="POST",route="/orders"}[2h]))
+        - record: slo:sli_error:ratio_rate6h
+          labels:
+            slo: orders-availability
+          expr: |
+            (
+              sum(rate(http_requests_total{job="order-api",method="POST",route="/orders",status=~"5.."}[6h]))
+              or vector(0)
+            )
+            /
+            sum(rate(http_requests_total{job="order-api",method="POST",route="/orders"}[6h]))
+        - record: slo:sli_error:ratio_rate1d
+          labels:
+            slo: orders-availability
+          expr: |
+            (
+              sum(rate(http_requests_total{job="order-api",method="POST",route="/orders",status=~"5.."}[1d]))
+              or vector(0)
+            )
+            /
+            sum(rate(http_requests_total{job="order-api",method="POST",route="/orders"}[1d]))
+        # 1.0 = untouched budget, 0 = spent, negative = SLO breached (24h view).
+        - record: slo:error_budget_remaining:ratio_1d
+          labels:
+            slo: orders-availability
+          expr: 1 - (slo:sli_error:ratio_rate1d{slo="orders-availability"} / 0.005)
+    - name: slo-orders-availability-alerts
+      rules:
+        - alert: OrdersAvailabilityBudgetBurnCritical
+          expr: |
+            (
+              slo:sli_error:ratio_rate1h{slo="orders-availability"} > (14.4 * 0.005)
+              and
+              slo:sli_error:ratio_rate5m{slo="orders-availability"} > (14.4 * 0.005)
+            )
+            or
+            (
+              slo:sli_error:ratio_rate6h{slo="orders-availability"} > (6 * 0.005)
+              and
+              slo:sli_error:ratio_rate30m{slo="orders-availability"} > (6 * 0.005)
+            )
+          for: 2m
+          labels:
+            severity: critical
+            team: order-platform
+          annotations:
+            summary: "POST /orders availability (non-5xx) is burning error budget fast"
+            description: "Error ratio {{ $value | humanizePercentage }} vs budget 0.005. At this rate the budget is gone within hours."
+        - alert: OrdersAvailabilityBudgetBurnWarning
+          expr: |
+            slo:sli_error:ratio_rate1d{slo="orders-availability"} > (3 * 0.005)
+            and
+            slo:sli_error:ratio_rate2h{slo="orders-availability"} > (3 * 0.005)
+          for: 15m
+          labels:
+            severity: warning
+            team: order-platform
+          annotations:
+            summary: "POST /orders availability (non-5xx) is steadily burning error budget"
+            description: "1d error ratio {{ $value | humanizePercentage }} vs budget 0.005 (3x burn)."
+    # ---------------- orders-latency: 99% < 250ms [budget 0.01] ----------------
+    - name: slo-orders-latency-recording
+      interval: 30s
+      rules:
+        - record: slo:sli_error:ratio_rate5m
+          labels:
+            slo: orders-latency
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="order-api",method="POST",route="/orders",le="0.25"}[5m]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="order-api",method="POST",route="/orders"}[5m]))
+            )
+        - record: slo:sli_error:ratio_rate30m
+          labels:
+            slo: orders-latency
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="order-api",method="POST",route="/orders",le="0.25"}[30m]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="order-api",method="POST",route="/orders"}[30m]))
+            )
+        - record: slo:sli_error:ratio_rate1h
+          labels:
+            slo: orders-latency
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="order-api",method="POST",route="/orders",le="0.25"}[1h]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="order-api",method="POST",route="/orders"}[1h]))
+            )
+        - record: slo:sli_error:ratio_rate2h
+          labels:
+            slo: orders-latency
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="order-api",method="POST",route="/orders",le="0.25"}[2h]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="order-api",method="POST",route="/orders"}[2h]))
+            )
+        - record: slo:sli_error:ratio_rate6h
+          labels:
+            slo: orders-latency
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="order-api",method="POST",route="/orders",le="0.25"}[6h]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="order-api",method="POST",route="/orders"}[6h]))
+            )
+        - record: slo:sli_error:ratio_rate1d
+          labels:
+            slo: orders-latency
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="order-api",method="POST",route="/orders",le="0.25"}[1d]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="order-api",method="POST",route="/orders"}[1d]))
+            )
+        # 1.0 = untouched budget, 0 = spent, negative = SLO breached (24h view).
+        - record: slo:error_budget_remaining:ratio_1d
+          labels:
+            slo: orders-latency
+          expr: 1 - (slo:sli_error:ratio_rate1d{slo="orders-latency"} / 0.01)
+    - name: slo-orders-latency-alerts
+      rules:
+        - alert: OrdersLatencyBudgetBurnCritical
+          expr: |
+            (
+              slo:sli_error:ratio_rate1h{slo="orders-latency"} > (14.4 * 0.01)
+              and
+              slo:sli_error:ratio_rate5m{slo="orders-latency"} > (14.4 * 0.01)
+            )
+            or
+            (
+              slo:sli_error:ratio_rate6h{slo="orders-latency"} > (6 * 0.01)
+              and
+              slo:sli_error:ratio_rate30m{slo="orders-latency"} > (6 * 0.01)
+            )
+          for: 2m
+          labels:
+            severity: critical
+            team: order-platform
+          annotations:
+            summary: "POST /orders latency (<250ms) is burning error budget fast"
+            description: "Error ratio {{ $value | humanizePercentage }} vs budget 0.01. At this rate the budget is gone within hours."
+        - alert: OrdersLatencyBudgetBurnWarning
+          expr: |
+            slo:sli_error:ratio_rate1d{slo="orders-latency"} > (3 * 0.01)
+            and
+            slo:sli_error:ratio_rate2h{slo="orders-latency"} > (3 * 0.01)
+          for: 15m
+          labels:
+            severity: warning
+            team: order-platform
+          annotations:
+            summary: "POST /orders latency (<250ms) is steadily burning error budget"
+            description: "1d error ratio {{ $value | humanizePercentage }} vs budget 0.01 (3x burn)."
+    # ---------------- saga / pipeline health ----------------
+    - name: order-saga-alerts
+      rules:
+        - alert: OrderPublishFailures
+          expr: sum(increase(order_publish_failures_total[5m])) > 0
+          labels:
+            severity: critical
+            team: order-platform
+          annotations:
+            summary: "Orders written to DynamoDB but not published to SQS"
+            description: "{{ $value | humanize }} order(s) in the last 5m will stay PENDING forever - needs reconciliation."
+        - alert: WorkerErrorRatioHigh
+          expr: |
+            sum by (job) (rate(worker_messages_total{outcome="error"}[5m]))
+            /
+            sum by (job) (rate(worker_messages_total[5m]))
+            > 0.05
+          for: 10m
+          labels:
+            severity: warning
+            team: order-platform
+          annotations:
+            summary: "{{ $labels.job }}: >5% of messages failing"
+            description: "{{ $value | humanizePercentage }} of messages error and get redelivered (DLQ after maxReceiveCount)."
+        - alert: PaymentFailureRateHigh
+          expr: |
+            sum(rate(payments_total{result="failed"}[10m]))
+            /
+            sum(rate(payments_total[10m]))
+            > 0.20
+          for: 10m
+          labels:
+            severity: warning
+            team: order-platform
+          annotations:
+            summary: "Payment failure rate {{ $value | humanizePercentage }} (expected ~10%)"
+            description: "Double the injected failure rate - the payment path itself is degrading."
+        - alert: PaymentRaceLost
+          expr: sum(increase(payment_race_lost_total[15m])) > 0
+          labels:
+            severity: warning
+            team: order-platform
+          annotations:
+            summary: "A charge lost the status-update race"
+            description: "Money may have moved without a recorded state change - check reconciliation."
