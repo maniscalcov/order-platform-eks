@@ -55,3 +55,5 @@ __pycache__/
 *.log
 node_modules/
 .idea/
+# Claude session files
+Claude outputs/
