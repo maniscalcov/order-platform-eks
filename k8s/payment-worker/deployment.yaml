@@ -30,7 +30,7 @@ spec:
       containers:
         - name: payment-worker
           # BEFORE APPLYING: replace with your ECR image URI + a real tag.
-          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/payment-worker:3da7e8ef1fbc9b793b7274c121055591c6d52b3e
+          image: 584477830979.dkr.ecr.us-east-2.amazonaws.com/payment-worker:11604b546ea155ca8d6116b351a693affe9f61c5
           imagePullPolicy: IfNotPresent
 
           ports:
