@@ -1,0 +1,102 @@
+# kube-prometheus-stack values for order-platform (EKS 1.35, 3x t3.large)
+# Chart: prometheus-community/kube-prometheus-stack 91.8.1 (operator v0.94.1)
+# Installed by hand with Helm (like KEDA/ArgoCD) so its CRDs exist BEFORE
+# ArgoCD syncs ServiceMonitors / PrometheusRules from k8s\.
+
+# --- EKS: AWS manages the control plane --------------------------------------
+# etcd, scheduler and controller-manager endpoints aren't reachable on EKS, and
+# kube-proxy binds its metrics to 127.0.0.1. Scraping them only produces
+# permanent "target down" alerts, so turn off the scrapes and their rules.
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+
+# --- Prometheus -----------------------------------------------------------------
+prometheus:
+  prometheusSpec:
+    # By default Prometheus only selects ServiceMonitors/Rules that carry this
+    # Helm release's label. Our app objects come from ArgoCD, not this release,
+    # so "false" = select every ServiceMonitor/PodMonitor/Rule in the cluster.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+
+    retention: 24h
+    # No storageSpec -> emptyDir. Metrics reset on pod restart / cluster
+    # rebuild, but no EBS volume is created that could outlive the cluster.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
+
+# --- Alertmanager ---------------------------------------------------------------
+alertmanager:
+  alertmanagerSpec:
+    # No storage -> emptyDir (silences reset on restart; fine for a lab).
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+# --- Grafana --------------------------------------------------------------------
+grafana:
+  persistence:
+    enabled: false
+  sidecar:
+    dashboards:
+      enabled: true
+      # Any ConfigMap labelled grafana_dashboard="1" in ANY namespace is loaded,
+      # so the app dashboard can live in k8s\ and be deployed by ArgoCD.
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# --- Supporting components ---------------------------------------------------------
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
