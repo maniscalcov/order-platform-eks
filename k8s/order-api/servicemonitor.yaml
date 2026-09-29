@@ -1,0 +1,20 @@
+# Tells the Prometheus Operator to scrape order-api through its Service.
+# Requires the monitoring.coreos.com CRDs, which kube-prometheus-stack
+# installs - that's why the stack is installed by Helm BEFORE ArgoCD syncs this.
+# Picked up without a "release" label because kps-values.yaml sets
+# serviceMonitorSelectorNilUsesHelmValues: false.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: order-api
+  namespace: order-platform
+  labels:
+    app: order-api
+spec:
+  selector:
+    matchLabels:
+      app: order-api          # the Service's labels
+  endpoints:
+    - port: http              # named Service port -> container port 8000
+      path: /metrics
+      interval: 15s

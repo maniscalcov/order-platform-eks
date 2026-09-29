@@ -11,8 +11,10 @@ up stock the customer will never pay for.
 import logging
 import signal
 import threading
+import time
 
 from app.config import settings
+from app.metrics import INVENTORY_RESERVATIONS, WORKER_DURATION, WORKER_MESSAGES
 from app.db import release_item, reserve_item, update_order_status
 from app.models import InventoryReservationMessage, OrderStatus, PaymentRequestMessage
 from app.queue import delete_message, publish_payment_request, receive_messages
@@ -43,6 +45,7 @@ def process_message(body: str) -> None:
         for item in reserved_items:
             release_item(item.sku, item.quantity)
         update_order_status(msg.order_id, OrderStatus.INVENTORY_FAILED)
+        INVENTORY_RESERVATIONS.labels("out_of_stock").inc()
         logger.warning(
             "Order %s failed to reserve sku=%s, released %d earlier reservation(s)",
             msg.order_id,
@@ -52,6 +55,7 @@ def process_message(body: str) -> None:
         return
 
     update_order_status(msg.order_id, OrderStatus.INVENTORY_RESERVED)
+    INVENTORY_RESERVATIONS.labels("reserved").inc()
     amount_cents = sum(i.quantity * i.unit_price_cents for i in msg.items)
     publish_payment_request(
         PaymentRequestMessage(
@@ -77,10 +81,13 @@ def run() -> None:
     while not _shutdown.is_set():
         messages = receive_messages()
         for message in messages:
+            start = time.perf_counter()
             try:
                 process_message(message["Body"])
                 delete_message(message["ReceiptHandle"])
+                WORKER_MESSAGES.labels("success").inc()
             except Exception:
+                WORKER_MESSAGES.labels("error").inc()
                 # Deliberately don't delete the message on failure - it
                 # becomes visible again after the queue's visibility
                 # timeout and gets retried. After N receives, the queue's
@@ -91,5 +98,7 @@ def run() -> None:
                     "Failed to process message %s, leaving for redelivery",
                     message.get("MessageId"),
                 )
+            finally:
+                WORKER_DURATION.observe(time.perf_counter() - start)
 
     logger.info("inventory-worker shut down cleanly")

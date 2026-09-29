@@ -14,14 +14,19 @@ GET /orders/{order_id}
 
 GET /health
     - liveness/readiness target for the Kubernetes probes
+
+GET /metrics
+    - Prometheus scrape endpoint (see app/metrics.py)
 """
 import logging
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.config import settings
 from app.db import get_order, put_order
+from app.metrics import ORDER_PUBLISH_FAILURES, ORDERS_CREATED, PrometheusMiddleware
 from app.models import InventoryReservationMessage, Order, OrderCreateRequest
 from app.queue import publish_inventory_reservation
 
@@ -29,6 +34,7 @@ logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(settings.SERVICE_NAME)
 
 app = FastAPI(title="order-api", version="1.0.0")
+app.add_middleware(PrometheusMiddleware)
 
 
 @app.on_event("startup")
@@ -40,6 +46,13 @@ def _validate_config() -> None:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": settings.SERVICE_NAME}
+
+
+# A plain route rather than app.mount(): a mounted app answers /metrics with
+# a 307 redirect to /metrics/, which works but adds a hop to every scrape.
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/orders", status_code=201)
@@ -55,6 +68,7 @@ def create_order(req: OrderCreateRequest) -> Order:
         put_order(order)
     except Exception as exc:
         raise HTTPException(status_code=500, detail="failed to create order") from exc
+    ORDERS_CREATED.inc()
 
     try:
         publish_inventory_reservation(
@@ -65,6 +79,7 @@ def create_order(req: OrderCreateRequest) -> Order:
             )
         )
     except Exception:
+        ORDER_PUBLISH_FAILURES.inc()
         logger.error(
             "Order %s was written but failed to publish to inventory queue",
             order.order_id,

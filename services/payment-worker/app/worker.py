@@ -6,9 +6,17 @@ a redelivered message.
 import logging
 import signal
 import threading
+import time
 
 from app.config import settings
 from app.db import get_order_status, update_order_status_if_current
+from app.metrics import (
+    PAYMENT_DUPLICATES_SKIPPED,
+    PAYMENT_RACE_LOST,
+    PAYMENTS,
+    WORKER_DURATION,
+    WORKER_MESSAGES,
+)
 from app.models import OrderStatus, PaymentRequestMessage
 from app.payment_gateway import simulate_charge
 from app.queue import delete_message, receive_messages
@@ -31,6 +39,7 @@ def process_message(body: str) -> None:
     # calling the (simulated) payment gateway again.
     current = get_order_status(msg.order_id)
     if current != OrderStatus.INVENTORY_RESERVED.value:
+        PAYMENT_DUPLICATES_SKIPPED.inc()
         logger.info(
             "Order %s is already %s, skipping (likely a redelivered message)",
             msg.order_id,
@@ -51,6 +60,7 @@ def process_message(body: str) -> None:
         msg.order_id, new_status, expected_current_status=OrderStatus.INVENTORY_RESERVED
     )
     if not updated:
+        PAYMENT_RACE_LOST.inc()
         # In a real payment system this is the case worth building a
         # reconciliation/refund path for: money may have moved (charged is
         # True) but the state transition lost the race. Flagged here as a
@@ -63,6 +73,7 @@ def process_message(body: str) -> None:
         )
         return
 
+    PAYMENTS.labels("completed" if charged else "failed").inc()
     logger.info("Order %s: payment %s", msg.order_id, new_status.value)
 
 
@@ -79,13 +90,18 @@ def run() -> None:
     while not _shutdown.is_set():
         messages = receive_messages()
         for message in messages:
+            start = time.perf_counter()
             try:
                 process_message(message["Body"])
                 delete_message(message["ReceiptHandle"])
+                WORKER_MESSAGES.labels("success").inc()
             except Exception:
+                WORKER_MESSAGES.labels("error").inc()
                 logger.exception(
                     "Failed to process message %s, leaving for redelivery",
                     message.get("MessageId"),
                 )
+            finally:
+                WORKER_DURATION.observe(time.perf_counter() - start)
 
     logger.info("payment-worker shut down cleanly")

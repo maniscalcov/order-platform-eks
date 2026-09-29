@@ -1,0 +1,18 @@
+# inventory-worker has no Service (nothing calls into it - it pulls from SQS), so a
+# PodMonitor scrapes the pods directly on the existing "health" port (8080),
+# which serves /metrics alongside /health.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: inventory-worker
+  namespace: order-platform
+  labels:
+    app: inventory-worker
+spec:
+  selector:
+    matchLabels:
+      app: inventory-worker
+  podMetricsEndpoints:
+    - port: health            # named containerPort 8080
+      path: /metrics
+      interval: 15s
