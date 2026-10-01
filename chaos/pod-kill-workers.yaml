@@ -1,0 +1,48 @@
+# Chaos experiment 1: kill saga worker pods while orders are flowing.
+#
+# NOT under k8s\ on purpose - ArgoCD syncs k8s\ recursively (with selfHeal),
+# so an experiment there would be re-applied forever. Apply/delete by hand:
+#   kubectl apply  -f chaos\pod-kill-workers.yaml   (start)
+#   kubectl delete -f chaos\pod-kill-workers.yaml   (stop)
+#
+# What it does: every 2 minutes, SIGKILL (gracePeriod 0 - no chance to finish
+# the current message) ONE random pod of inventory-worker or payment-worker.
+# Run it under load-test/chaos-load.js (~20 orders/s, which the workers keep
+# up with), so the steady state is "queues near 0".
+#
+# Hypothesis (write down BEFORE running):
+#   1. No order is lost: a message being processed when the pod dies is never
+#      deleted from SQS, so it becomes visible again after the 30s visibility
+#      timeout and another pod processes it. DLQs stay empty.
+#   2. The Deployment replaces the pod within seconds; the queue backlog that
+#      builds meanwhile is small and drains (KEDA scales out only if it
+#      exceeds queueLength 20 per replica).
+#   3. Redelivery is visible: a redelivered inventory message re-publishes a
+#      payment request; payment-worker's idempotency check skips it
+#      (payment_duplicates_skipped_total > 0) instead of charging twice.
+#   4. Known risk: inventory-worker has NO idempotency check, so a message
+#      killed after reserve_item() but before delete_message() reserves the
+#      stock a second time on redelivery (stock leak, not a lost order).
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: pod-kill-workers
+  namespace: order-platform
+spec:
+  schedule: "@every 2m"
+  type: PodChaos
+  historyLimit: 10
+  concurrencyPolicy: Forbid
+  podChaos:
+    action: pod-kill
+    mode: one
+    gracePeriod: 0
+    selector:
+      namespaces:
+        - order-platform
+      expressionSelectors:
+        - key: app
+          operator: In
+          values:
+            - inventory-worker
+            - payment-worker

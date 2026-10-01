@@ -55,9 +55,13 @@ resource "aws_dynamodb_table" "inventory" {
 # Seed stock for the load test.
 #
 # These five SKUs match load-test/order-api-load.js exactly.
-# quantity_available is set high enough that a full 13-minute run (which
-# can create 10,000+ orders) won't exhaust stock mid-run and start
-# producing INVENTORY_FAILED instead of exercising the happy path.
+# quantity_available is set high enough that a full 13-minute run won't
+# exhaust stock mid-run and start producing INVENTORY_FAILED instead of
+# exercising the happy path. Math: an order has 1-3 of the 5 SKUs with
+# quantity 1-3, so each SKU drains ~0.8 units per order. A full run creates
+# ~120k orders (~96k units per SKU). The old seed of 5000 ran out after
+# ~6k orders (~2 minutes in, Session 3). 500000 gives ~5x headroom, which
+# also covers stock leaked by PAYMENT_FAILED orders (no compensation yet).
 #
 # IMPORTANT: terraform apply re-applies these values on every run, which
 # will overwrite whatever quantity_available has drifted to after real
@@ -68,11 +72,11 @@ resource "aws_dynamodb_table" "inventory" {
 # ---------------------------------------------------------------------------
 locals {
   seed_inventory = {
-    "SKU-WIDGET-001" = 5000
-    "SKU-WIDGET-002" = 5000
-    "SKU-GADGET-010" = 5000
-    "SKU-GADGET-011" = 5000
-    "SKU-DOODAD-100" = 5000
+    "SKU-WIDGET-001" = 500000
+    "SKU-WIDGET-002" = 500000
+    "SKU-GADGET-010" = 500000
+    "SKU-GADGET-011" = 500000
+    "SKU-DOODAD-100" = 500000
   }
 }
 

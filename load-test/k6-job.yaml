@@ -17,7 +17,7 @@ spec:
         runAsUser: 12345           # the k6 image's built-in non-root user
       containers:
         - name: k6
-          image: grafana/k6:latest
+          image: grafana/k6:2.3.0         # pinned (was :latest) - enforced by kyverno/disallow-latest-tag.yaml
           args: ["run", "/scripts/order-api-load.js"]
           env:
             - name: BASE_URL       # the script reads __ENV.BASE_URL

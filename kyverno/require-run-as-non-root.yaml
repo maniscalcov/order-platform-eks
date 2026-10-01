@@ -1,0 +1,46 @@
+# Every container in order-platform must run as non-root: either the
+# container sets securityContext.runAsNonRoot=true, or (if the container
+# doesn't set it) the pod-level securityContext does.
+#
+# Kyverno 1.19 CEL-based ValidatingPolicy (the legacy ClusterPolicy type is
+# deprecated). Scoped to the order-platform namespace only: platform add-ons
+# (kps, keda, argocd, chaos-mesh daemons) legitimately run differently.
+#
+# Rollout: validationActions [Audit] -> check PolicyReports -> [Deny] (now ENFORCED).
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-run-as-non-root
+  annotations:
+    policies.kyverno.io/title: Require runAsNonRoot
+    policies.kyverno.io/severity: high
+spec:
+  validationActions:
+    - Deny
+  # Also evaluate Deployments/Jobs so violations surface on the workload
+  # (and are rejected at apply / ArgoCD sync time), not only on Pods.
+  autogen:
+    podControllers:
+      controllers:
+        - deployments
+        - jobs
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: order-platform
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c,
+          (has(c.securityContext) && has(c.securityContext.runAsNonRoot))
+            ? c.securityContext.runAsNonRoot == true
+            : (has(object.spec.securityContext) &&
+               has(object.spec.securityContext.runAsNonRoot) &&
+               object.spec.securityContext.runAsNonRoot == true))
+      message: >-
+        Containers in order-platform must run as non-root: set
+        securityContext.runAsNonRoot=true on the pod or on every container.

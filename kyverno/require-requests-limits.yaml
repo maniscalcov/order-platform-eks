@@ -1,0 +1,43 @@
+# Every container in order-platform must declare CPU and memory requests
+# and limits. Requests are what the scheduler and the HPA (CPU % of request)
+# work from; memory limits stop one leaking pod from taking down a node.
+#
+# Note: CPU limits are a deliberate choice here, not a universal rule - they
+# can cause CFS throttling. Session 3 measured throttling at only 1-3% during
+# the worst latency, so the limits are kept and enforced for this namespace.
+#
+# Rollout: validationActions [Audit] -> check PolicyReports -> [Deny] (now ENFORCED).
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require CPU/memory requests and limits
+    policies.kyverno.io/severity: medium
+spec:
+  validationActions:
+    - Deny
+  autogen:
+    podControllers:
+      controllers:
+        - deployments
+        - jobs
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: order-platform
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c,
+          has(c.resources) &&
+          has(c.resources.requests) && has(c.resources.limits) &&
+          'cpu' in c.resources.requests && 'memory' in c.resources.requests &&
+          'cpu' in c.resources.limits && 'memory' in c.resources.limits)
+      message: >-
+        Containers in order-platform must set CPU and memory requests and
+        limits.

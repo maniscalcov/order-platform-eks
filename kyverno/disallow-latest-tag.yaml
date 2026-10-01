@@ -1,0 +1,42 @@
+# Every image in order-platform must be pinned: an explicit tag that is not
+# ":latest", or an immutable "@sha256:" digest. ":latest" (or no tag, which
+# means latest) makes deploys non-reproducible - the same manifest can run
+# different code on different days. The app images are already pinned to a
+# git commit SHA by the CI bot; this policy keeps it that way.
+#
+# Rollout: validationActions [Audit] -> check PolicyReports -> [Deny] (now ENFORCED).
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow latest / untagged images
+    policies.kyverno.io/severity: medium
+spec:
+  validationActions:
+    - Deny
+  autogen:
+    podControllers:
+      controllers:
+        - deployments
+        - jobs
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: order-platform
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    # The tag check looks only at the part after the last "/" so a registry
+    # port (e.g. myregistry:5000/app) isn't mistaken for a tag.
+    - expression: >-
+        object.spec.containers.all(c,
+          c.image.contains('@sha256:') ||
+          (c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') &&
+           !c.image.endsWith(':latest')))
+      message: >-
+        Images in order-platform must be pinned to a version tag or digest;
+        ':latest' and untagged images are not allowed.

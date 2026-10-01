@@ -127,7 +127,8 @@
 				"dynamodb:PutItem",
 				"dynamodb:GetItem",
 				"dynamodb:DeleteItem",
-				"dynamodb:UpdateItem"
+				"dynamodb:UpdateItem",
+				"dynamodb:Scan"
 			],
 			"Resource": "arn:aws:dynamodb:us-east-2:*:table/order-platform-*"
 		},
@@ -142,7 +143,8 @@
 				"sqs:GetQueueUrl",
 				"sqs:TagQueue",
 				"sqs:UntagQueue",
-				"sqs:ListQueueTags"
+				"sqs:ListQueueTags",
+				"sqs:PurgeQueue"
 			],
 			"Resource": "arn:aws:sqs:us-east-2:*:order-platform-*"
 		},
